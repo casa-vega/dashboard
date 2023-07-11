@@ -1,0 +1,48 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+    - main
+
+env:
+  DOCKER_USERNAME: ${{ github.actor }}
+  DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+  IMAGE_NAME: services-dashboard
+
+jobs:
+  docker-build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Fetch tags
+        run: git fetch --prune --unshallow --tags
+
+      - name: Save latest Git tag to state
+        run: echo "GIT_TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
+
+      - name: Save Git commit hash to state
+        run: echo "GIT_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        run: |
+          GIT_TAG=${{ env.GIT_TAG }}
+          GIT_COMMIT=${{ env.GIT_COMMIT }}
+          IMAGE_TAG="$IMAGE_NAME:${GIT_TAG}-commit-${GIT_COMMIT}"
+          docker build --tag ghcr.io/github/$IMAGE_TAG .
+          docker tag ghcr.io/github/$IMAGE_TAG ghcr.io/github/$IMAGE_NAME:latest
+
+      - name: Login to Github Packages
+        run: |
+          echo $DOCKER_PASSWORD | docker login ghcr.io -u $DOCKER_USERNAME --password-stdin
+
+      - name: Push Docker image to Github Packages
+        run: |
+          GIT_TAG=${{ env.GIT_TAG }}
+          GIT_COMMIT=${{ env.GIT_COMMIT }}
+          IMAGE_TAG="$IMAGE_NAME:${GIT_TAG}-commit-${GIT_COMMIT}"
+          docker push ghcr.io/github/$IMAGE_TAG
+          docker push ghcr.io/github/$IMAGE_NAME:latest
